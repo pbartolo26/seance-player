@@ -322,6 +322,7 @@ textarea:focus{outline:none;border-color:var(--accent)}
         rest: Math.round(num(e.rest, 30, 0, 1800)),
         v: v,
         y: isYoutubeId(e.y) ? e.y : '',
+        rn: e.rn == null ? -1 : Math.round(num(e.rn, -1, 0, 1800)),
         c: str(e.c).trim()
       };
     });
@@ -353,8 +354,12 @@ textarea:focus{outline:none;border-color:var(--accent)}
   }
 
   /** Repos (s) entre la série a et la série b du plan. */
+  // Entre deux exercices : `rn` de l'exercice quitté s'il est fixé (enchaînement court d'un
+  // échauffement), sinon le repos général de la séance.
   function restBetween(sess, a, b) {
-    return a.ex === b.ex ? sess.ex[a.ex].rest : sess.rb;
+    if (a.ex === b.ex) return sess.ex[a.ex].rest;
+    var rn = sess.ex[a.ex].rn;
+    return rn >= 0 ? rn : sess.rb;
   }
 
   function workSeconds(e) {
