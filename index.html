@@ -58,6 +58,7 @@ h1{font-size:28px;line-height:1.15;margin:6px 0 8px;overflow-wrap:anywhere}
 .media{position:relative;flex:1 1 auto;min-height:140px;margin:0 12px;border-radius:20px;overflow:hidden;background:#fff}
 .media.small{flex:1 1 auto;min-height:110px;margin-top:10px}
 .media video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#fff;display:block}
+.media iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:#000;display:block}
 .dots{position:absolute;left:0;right:0;bottom:4px;display:flex;justify-content:center;gap:4px}
 .dots button{width:44px;height:44px;border:0;background:transparent;display:flex;align-items:center;justify-content:center;padding:0;cursor:pointer}
 .dots button::after{content:"";width:13px;height:13px;border-radius:50%;background:rgba(0,0,0,.25)}
@@ -171,6 +172,7 @@ textarea:focus{outline:none;border-color:var(--accent)}
   <div id="p-work" class="panel">
     <div class="media" id="m-main">
       <video id="v-a" muted loop playsinline autoplay preload="auto" disablepictureinpicture disableremoteplayback></video>
+      <iframe id="yt-main" hidden title="Démonstration YouTube" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>
       <span class="angle" id="angle" hidden></span>
       <div class="dots" id="dots"></div>
       <a class="demo-link" id="l-main" target="_blank" rel="noopener" hidden>🔎 Voir une démo<small>vidéo indisponible — ouvre YouTube</small></a>
@@ -319,6 +321,7 @@ textarea:focus{outline:none;border-color:var(--accent)}
         t: t, r: r,
         rest: Math.round(num(e.rest, 30, 0, 1800)),
         v: v,
+        y: isYoutubeId(e.y) ? e.y : '',
         c: str(e.c).trim()
       };
     });
@@ -459,6 +462,13 @@ textarea:focus{outline:none;border-color:var(--accent)}
   function youtubeUrl(name) {
     return 'https://www.youtube.com/results?search_query=' + encodeURIComponent(name) + '+exercice+technique';
   }
+  // Vidéo YouTube choisie par le bot (champ `y`) pour un exercice sans vidéo Coros : intégrée
+  // en lecture automatique, muette (seule lecture auto permise), en boucle.
+  function isYoutubeId(id) { return typeof id === 'string' && /^[A-Za-z0-9_-]{11}$/.test(id); }
+  function youtubeEmbed(id) {
+    return 'https://www.youtube-nocookie.com/embed/' + id +
+      '?autoplay=1&mute=1&playsinline=1&loop=1&playlist=' + id + '&rel=0&modestbranding=1';
+  }
 
   var RPE_LABELS = ['', 'Très facile', 'Facile', 'Modéré', 'Un peu soutenu', 'Soutenu',
     'Dur', 'Très dur', 'Très, très dur', 'Quasi maximal', 'Maximal'];
@@ -470,7 +480,7 @@ textarea:focus{outline:none;border-color:var(--accent)}
     estimateSeconds: estimateSeconds, localIso: localIso, formatClock: formatClock, formatMS: formatMS,
     formatDuration: formatDuration, formatEstimate: formatEstimate, describeEx: describeEx,
     utf8Len: utf8Len, fitResult: fitResult, buildResult: buildResult,
-    videoUrl: videoUrl, youtubeUrl: youtubeUrl
+    videoUrl: videoUrl, youtubeUrl: youtubeUrl, isYoutubeId: isYoutubeId, youtubeEmbed: youtubeEmbed
   };
   root.Core = Core;
   if (typeof module !== 'undefined' && module.exports) module.exports = Core;
@@ -687,11 +697,19 @@ textarea:focus{outline:none;border-color:var(--accent)}
     if (!ids.length) {
       vMain.hidden = true;
       try { vMain.pause(); } catch (e) {}
-      link.hidden = false;
-      link.href = C.youtubeUrl(ex.n);
-      link.firstChild.textContent = '🔎 Voir une démo';
-      link.querySelector('small').textContent = ex.v.length ? 'vidéo indisponible — ouvre YouTube' : 'pas de vidéo pour cet exercice — ouvre YouTube';
+      if (ex.y) {
+        // Pas de vidéo Coros mais une vidéo YouTube trouvée par le bot : on la joue sur place.
+        link.hidden = true;
+        showYoutube(ex.y);
+      } else {
+        hideYoutube();
+        link.hidden = false;
+        link.href = C.youtubeUrl(ex.n);
+        link.firstChild.textContent = '🔎 Voir une démo';
+        link.querySelector('small').textContent = ex.v.length ? 'vidéo indisponible — ouvre YouTube' : 'pas de vidéo pour cet exercice — ouvre YouTube';
+      }
     } else {
+      hideYoutube();
       link.hidden = true;
       vMain.hidden = false;
       // Le lecteur « suivant » a déjà chargé cette vidéo pendant le repos : on échange les rôles.
@@ -700,6 +718,19 @@ textarea:focus{outline:none;border-color:var(--accent)}
       if (S.running) playSafe(vMain);
     }
     renderDots(ids);
+  }
+
+  function showYoutube(id) {
+    var yt = $('yt-main');
+    if (yt.dataset.id !== id) { yt.dataset.id = id; yt.src = C.youtubeEmbed(id); }
+    yt.hidden = false;
+  }
+
+  // Quitter l'exercice coupe la vidéo YouTube (src retiré) : sinon elle continuerait en fond.
+  function hideYoutube() {
+    var yt = $('yt-main');
+    if (yt.dataset.id) { yt.removeAttribute('src'); yt.dataset.id = ''; }
+    yt.hidden = true;
   }
 
   function swapVideos() {
@@ -1017,6 +1048,7 @@ textarea:focus{outline:none;border-color:var(--accent)}
     if (S.timer) { clearInterval(S.timer); S.timer = null; }
     releaseAwake();
     [vMain, vNext].forEach(function (v) { try { v.pause(); } catch (e) {} });
+    hideYoutube();
     $('ov-pause').hidden = true;
     beepEnd(); buzz([200, 100, 200, 100, 400]);
     renderEnd();
