@@ -32,6 +32,12 @@ Sans vidéo (ou vidéo en erreur) : lien « 🔎 Voir une démo » vers une rech
 
 Encodage côté bot (Node) : `Buffer.from(JSON.stringify(seance)).toString('base64url')`.
 
+Sur l'accueil, toucher un exercice déroule son animation (toucher la vidéo = angle suivant).
+
+**Mode aperçu** : `#s=…&apercu=1`, la même séance sans bouton « Commencer » (bouton « Fermer l'aperçu »).
+Le bot l'ouvre depuis un bouton inline avant de programmer une séance. `sendData` n'y marcherait pas :
+la séance se lance toujours depuis le bouton de clavier.
+
 ## Sortie : `Telegram.WebApp.sendData`
 
 ```json

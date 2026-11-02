@@ -45,6 +45,16 @@ h1{font-size:28px;line-height:1.15;margin:6px 0 8px;overflow-wrap:anywhere}
 .exlist .t{font-size:19px;font-weight:700;overflow-wrap:anywhere}
 .exlist .d{color:var(--hint);font-size:15px;margin-top:2px}
 .exlist .c{font-size:15px;margin-top:4px;font-style:italic;opacity:.85}
+.exlist li{flex-wrap:wrap;cursor:pointer}
+.exlist .body{flex:1 1 0;min-width:0}
+.exlist .eye{flex:none;color:var(--hint);font-size:20px;line-height:34px;transition:transform .2s}
+.exlist li.open .eye{transform:rotate(180deg)}
+.hmedia{flex:1 1 100%;position:relative;height:min(56vw,300px);border-radius:14px;overflow:hidden;background:#fff}
+.hmedia video,.hmedia iframe{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;border:0;background:#fff;display:block}
+.hmedia iframe{background:#000}
+.hmedia .demo-link{font-size:19px}
+.hint{color:var(--hint);font-size:15px;margin-top:10px}
+.preview-note{color:var(--hint);font-size:15px;text-align:center;padding:0 16px}
 
 /* Séance */
 .topbar{flex:none;display:flex;align-items:center;gap:10px;padding:8px 12px}
@@ -153,9 +163,14 @@ textarea:focus{outline:none;border-color:var(--accent)}
     <p class="kicker" id="h-meta"></p>
     <h1 id="h-title"></h1>
     <p class="sum" id="h-sum"></p>
+    <p class="hint">👆 Touche un exercice pour voir son animation.</p>
     <ol class="exlist" id="h-list"></ol>
   </div>
-  <div class="footer"><button id="b-start" class="btn primary">▶️ Commencer</button></div>
+  <p class="preview-note" id="h-pnote" hidden>Aperçu : la séance se lance le jour J depuis le bouton « ▶️ Lancer la séance » du coach.</p>
+  <div class="footer">
+    <button id="b-start" class="btn primary">▶️ Commencer</button>
+    <button id="b-close" class="btn" hidden>✖ Fermer l'aperçu</button>
+  </div>
 </section>
 
 <!-- Séance en cours -->
@@ -665,14 +680,82 @@ textarea:focus{outline:none;border-color:var(--accent)}
     ol.innerHTML = '';
     sess.ex.forEach(function (e, i) {
       var li = document.createElement('li');
-      li.innerHTML = '<span class="num"></span><div><div class="t"></div><div class="d"></div><div class="c"></div></div>';
+      li.innerHTML = '<span class="num"></span><div class="body"><div class="t"></div><div class="d"></div><div class="c"></div></div><span class="eye">▾</span>';
       li.querySelector('.num').textContent = i + 1;
       li.querySelector('.t').textContent = e.n;
       li.querySelector('.d').textContent = C.describeEx(e) + (e.s > 1 ? ' · repos ' + C.formatDuration(e.rest) : '') +
-        (e.v.length ? '' : ' · sans vidéo');
+        (e.v.length || e.y ? '' : ' · sans vidéo');
       if (e.c) li.querySelector('.c').textContent = e.c; else li.querySelector('.c').remove();
+      li.addEventListener('click', function (ev) {
+        if (ev.target.closest('.hmedia')) return;
+        toggleHomeMedia(li, i);
+      });
       ol.appendChild(li);
     });
+    var preview = 'apercu' in readHashParams();
+    $('b-start').hidden = preview;
+    $('b-close').hidden = !preview;
+    $('h-pnote').hidden = !preview;
+    if (preview) $('h-meta').textContent = 'Aperçu · ' + $('h-meta').textContent;
+  }
+
+  // Animation d'un exercice sur l'accueil (une seule ouverte à la fois) : vidéo Coros (toucher
+  // = angle suivant), sinon la vidéo YouTube choisie par le bot, sinon un lien de recherche.
+  function closeHomeMedia() {
+    var open = document.querySelector('#h-list li.open');
+    if (!open) return;
+    var m = open.querySelector('.hmedia');
+    if (m) {
+      var v = m.querySelector('video');
+      if (v) { try { v.pause(); } catch (e) {} v.removeAttribute('src'); try { v.load(); } catch (e) {} }
+      m.remove();
+    }
+    open.classList.remove('open');
+  }
+
+  function toggleHomeMedia(li, i) {
+    var wasOpen = li.classList.contains('open');
+    closeHomeMedia();
+    if (wasOpen) return;
+    var e = S.sess.ex[i], m = document.createElement('div');
+    m.className = 'hmedia';
+    li.appendChild(m);
+    li.classList.add('open');
+    var ids = e.v.slice(), k = 0;
+    function fallback() {
+      m.innerHTML = '';
+      if (e.y) {
+        var f = document.createElement('iframe');
+        f.title = 'Démonstration YouTube';
+        f.allow = 'autoplay; encrypted-media; picture-in-picture';
+        f.referrerPolicy = 'strict-origin-when-cross-origin';
+        f.src = C.youtubeEmbed(e.y);
+        m.appendChild(f);
+        return;
+      }
+      var a = document.createElement('a');
+      a.className = 'demo-link';
+      a.href = C.youtubeUrl(e.n);
+      a.innerHTML = '🔎 Voir une démo<small>pas de vidéo pour cet exercice — ouvre YouTube</small>';
+      a.addEventListener('click', function (ev) { ev.preventDefault(); openExternal(a.href); });
+      m.appendChild(a);
+    }
+    if (!ids.length) { fallback(); return; }
+    var v = document.createElement('video');
+    v.muted = true; v.loop = true; v.autoplay = true; v.playsInline = true;
+    v.setAttribute('playsinline', ''); v.setAttribute('muted', '');
+    v.addEventListener('error', function () {
+      ids.splice(k, 1);
+      if (!ids.length) { fallback(); return; }
+      k = k % ids.length; v.src = C.videoUrl(ids[k]);
+    });
+    v.addEventListener('click', function () {
+      if (ids.length > 1) { k = (k + 1) % ids.length; v.src = C.videoUrl(ids[k]); }
+      try { var p = v.play(); if (p && p.catch) p.catch(function () {}); } catch (err) {}
+    });
+    v.src = C.videoUrl(ids[k]);
+    m.appendChild(v);
+    try { var p = v.play(); if (p && p.catch) p.catch(function () {}); } catch (err) {}
   }
 
   /* ---------- Vidéos (2 lecteurs : courant + suivant préchargé) ---------- */
@@ -1145,7 +1228,11 @@ textarea:focus{outline:none;border-color:var(--accent)}
   }
 
   /* ---------- Branchements ---------- */
-  $('b-start').addEventListener('click', start);
+  $('b-start').addEventListener('click', function () { closeHomeMedia(); start(); });
+  $('b-close').addEventListener('click', function () {
+    closeHomeMedia();
+    if (inTG) tgCall('close'); else { try { window.close(); } catch (e) {} history.back(); }
+  });
   $('b-act').addEventListener('click', onAct);
   $('b-minus').addEventListener('click', function () { changeCount(-1); });
   $('b-plus').addEventListener('click', function () { changeCount(1); });
